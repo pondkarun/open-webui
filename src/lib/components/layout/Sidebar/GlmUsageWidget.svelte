@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { toast } from 'svelte-sonner';
 	import { getGlmUsage, type GlmUsage } from '$lib/apis/glm';
-	import { token } from '$lib/stores';
 
 	export let className = '';
 
@@ -21,7 +19,7 @@
 		loading = true;
 		error = null;
 		try {
-			usage = await getGlmUsage($token, refresh);
+			usage = await getGlmUsage(localStorage.token, refresh);
 		} catch (e) {
 			error = typeof e === 'string' ? e : 'failed to load usage';
 		} finally {
