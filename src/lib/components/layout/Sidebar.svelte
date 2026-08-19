@@ -63,6 +63,7 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import UserMenu from './Sidebar/UserMenu.svelte';
+	import GlmUsageWidget from './Sidebar/GlmUsageWidget.svelte';
 	import ChatItem from './Sidebar/ChatItem.svelte';
 	import Spinner from '../common/Spinner.svelte';
 	import Loader from '../common/Loader.svelte';
@@ -1060,10 +1061,13 @@
 		</button>
 
 		<div>
-			<div>
-				<div class=" flex justify-center items-center">
-					{#if $user !== undefined && $user !== null}
-						<UserMenu role={$user?.role} profile={$config?.features?.enable_user_status ?? true}>
+		{#if $user !== undefined && $user !== null}
+			<GlmUsageWidget className="mb-1" />
+		{/if}
+		<div>
+			<div class=" flex justify-center items-center">
+				{#if $user !== undefined && $user !== null}
+					<UserMenu role={$user?.role} profile={$config?.features?.enable_user_status ?? true}>
 							<button
 								type="button"
 								class=" cursor-pointer flex size-8.5 items-center justify-center transition group"

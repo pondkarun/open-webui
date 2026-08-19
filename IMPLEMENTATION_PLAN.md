@@ -93,19 +93,11 @@ Related endpoints from the same script (not required for v1, note for later):
 - Sidebar widget (Svelte component) polling that route every few minutes, showing a
   progress bar + "resets in Xh Ym" for the 5-hour window.
 
-### 4. Approval / clarifying-question flow — **research spike first, don't design blind**
-- Hermes already has a `clarify` tool (confirmed present via `hermes doctor`) and the
-  built-in dashboard's embedded TUI already renders "clarify/sudo/approval prompts"
-  natively. What's unresolved: how (or whether) that same signal comes through the
-  **OpenAI-compatible `/v1/chat/completions` stream** that Open WebUI actually consumes —
-  it may arrive as a special tool-call, a particular content block, or not be exposed
-  over that API at all yet.
-- First task under this step is literally: trigger a `clarify` call through the API
-  server and inspect the raw SSE stream to see what shape it takes. Design the UI
-  component (modal/inline buttons + Web Push notification) only after that's known.
-- If it turns out `clarify` isn't exposed over the OpenAI-compatible API at all, the
-  fallback is polling Hermes's own session/job state some other way — flag back to the
-  user rather than guessing at a workaround.
+### 4. Approval / clarifying-question flow — research spike first, don't design blind
+- **RESOLVED (2026-08-20, verified against hermes-agent source `gateway/platforms/api_server.py` + `gateway/platforms/base.py`):**
+  - `/v1/chat/completions` is stateless but session-continuity capable (X-Hermes-Session-Id header). Clarify over it works via the **text fallback**: Hermes renders choices as a numbered list in the reply, user types "2" or the option text, gateway text-intercept resolves it. No custom UI needed for v1. ✅
+  - Rich approval/clarify (buttons, push) comes from the separate **Runs API**: `POST /v1/runs` → `run_id`; `GET /v1/runs/{id}/events` SSE emits `approval.request` events with `choices` (`once/session/always/deny` for command approvals); resolve via `POST /v1/runs/{id}/approval`. Also `/api/sessions` CRUD + `/api/sessions/{id}/chat` for persistent sessions.
+  - Decision: **v1 ships with text-fallback clarify** (works today, zero code). Runs-based approval UI = future enhancement (needs a parallel side-panel client inside Open WebUI).
 
 ### 5. PWA polish
 - Open WebUI ships a PWA manifest + service worker already; mainly need: app icon/name
