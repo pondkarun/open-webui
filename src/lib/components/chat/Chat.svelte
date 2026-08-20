@@ -3126,6 +3126,10 @@
 			{
 				stream: stream,
 				model: model.id,
+				// Hermes session continuity: the backend turns this into the
+				// X-Hermes-Session-Key header so multi-turn clarify/approval
+				// flows resolve in the same agent session.
+				metadata: { chat_id: _chatId || undefined },
 				...(messages.length > 0 ? { messages } : {}),
 				params: {
 					...$settings?.params,

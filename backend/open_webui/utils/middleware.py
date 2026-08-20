@@ -4217,9 +4217,19 @@ async def streaming_chat_response_handler(response, ctx):
 
                     filter_extra_params = {'__body__': form_data, **extra_params} if filter_functions else None
 
+                    # Named SSE events (e.g. Hermes "event: hermes.tool.progress")
+                    # arrive on "event:" lines that the data-only parser below
+                    # would skip. Buffer the event name and attach it to the
+                    # next data line so downstream handlers can branch on it.
+                    pending_sse_event = None
+
                     async for line in response.body_iterator:
                         line = line.decode('utf-8', 'replace') if isinstance(line, bytes) else line
                         data = line
+
+                        if data.startswith('event:'):
+                            pending_sse_event = data[6:].strip()
+                            continue
 
                         # Skip empty lines
                         if not data or data.isspace():
@@ -4267,6 +4277,29 @@ async def streaming_chat_response_handler(response, ctx):
                                 )
 
                             if data:
+                                # Hermes named events (hermes.tool.progress): the
+                                # buffered "event:" name tells us what this data
+                                # payload is. Surface it as a standard OWUI
+                                # status event so the existing StatusHistory UI
+                                # renders it (shimmer + timeline, zero new
+                                # frontend code needed).
+                                if pending_sse_event == 'hermes.tool.progress' and isinstance(data, dict):
+                                    running = data.get('status', 'running') != 'completed'
+                                    await event_emitter(
+                                        {
+                                            'type': 'status',
+                                            'data': {
+                                                'action': 'hermes_tool',
+                                                'description': (
+                                                    f"{data.get('emoji', '')} {data.get('label', data.get('tool', ''))}"
+                                                ).strip(),
+                                                'done': not running,
+                                            },
+                                        }
+                                    )
+                                    pending_sse_event = None
+                                    continue
+
                                 if 'event' in data and not getattr(request.state, 'direct', False):
                                     await event_emitter(data.get('event', {}))
 
