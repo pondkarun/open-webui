@@ -149,6 +149,7 @@ from open_webui.routers import (
     files,
     folders,
     functions,
+    glm_usage,
     groups,
     images,
     knowledge,
@@ -794,6 +795,8 @@ app.include_router(audio.router, prefix='/api/v1/audio', tags=['audio'])
 app.include_router(retrieval.router, prefix='/api/v1/retrieval', tags=['retrieval'])
 
 app.include_router(configs.router, prefix='/api/v1/configs', tags=['configs'])
+
+app.include_router(glm_usage.router, prefix='/api/v1/glm', tags=['glm-usage'])
 
 app.include_router(auths.router, prefix='/api/v1/auths', tags=['auths'])
 app.include_router(users.router, prefix='/api/v1/users', tags=['users'])
@@ -2697,23 +2700,39 @@ async def get_manifest_json():
             return await r.json()
     else:
         return {
+            'id': '/',
             'name': app.state.WEBUI_NAME,
             'short_name': app.state.WEBUI_NAME,
             'description': f'{app.state.WEBUI_NAME} is an open, extensible, user-friendly interface for AI that adapts to your workflow.',
             'start_url': '/',
+            'scope': '/',
+            'lang': 'en',
             'display': 'standalone',
             'background_color': '#343541',
+            'theme_color': '#171717',
             'icons': [
                 {
-                    'src': '/static/logo.png',
+                    'src': '/static/favicon-96x96.png',
                     'type': 'image/png',
-                    'sizes': '500x500',
+                    'sizes': '96x96',
                     'purpose': 'any',
                 },
                 {
-                    'src': '/static/logo.png',
+                    'src': '/static/web-app-manifest-192x192.png',
                     'type': 'image/png',
-                    'sizes': '500x500',
+                    'sizes': '192x192',
+                    'purpose': 'any',
+                },
+                {
+                    'src': '/static/web-app-manifest-512x512.png',
+                    'type': 'image/png',
+                    'sizes': '512x512',
+                    'purpose': 'any',
+                },
+                {
+                    'src': '/static/web-app-manifest-512x512.png',
+                    'type': 'image/png',
+                    'sizes': '512x512',
                     'purpose': 'maskable',
                 },
             ],

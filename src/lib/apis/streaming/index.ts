@@ -1,6 +1,14 @@
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 import type { ParsedEvent } from 'eventsource-parser';
 
+type ToolProgress = {
+	tool: string;
+	emoji: string;
+	label: string;
+	toolCallId: string;
+	status: 'running' | 'completed';
+};
+
 type TextStreamUpdate = {
 	done: boolean;
 	value: string;
@@ -10,6 +18,7 @@ type TextStreamUpdate = {
 	selectedModelId?: any;
 	error?: any;
 	usage?: ResponseUsage;
+	toolProgress?: ToolProgress;
 };
 
 type ResponseUsage = {
@@ -67,6 +76,23 @@ async function* openAIStreamToIterator(
 				break;
 			}
 
+			// Hermes named events: hermes.tool.progress — surface tool activity
+			// so users see what the agent is doing during long tool turns.
+			if (value.event === 'hermes.tool.progress') {
+				yield {
+					done: false,
+					value: '',
+					toolProgress: {
+						tool: parsedData.tool ?? '',
+						emoji: parsedData.emoji ?? '',
+						label: parsedData.label ?? parsedData.tool ?? '',
+						toolCallId: parsedData.toolCallId ?? '',
+						status: parsedData.status ?? 'running'
+					}
+				};
+				continue;
+			}
+
 			if (parsedData.sources) {
 				yield { done: false, value: '', sources: parsedData.sources };
 				continue;
@@ -116,6 +142,10 @@ async function* streamLargeDeltasAsRandomChunks(
 			continue;
 		}
 		if (textStreamUpdate.usage) {
+			yield textStreamUpdate;
+			continue;
+		}
+		if (textStreamUpdate.toolProgress) {
 			yield textStreamUpdate;
 			continue;
 		}
