@@ -55,7 +55,7 @@ def make_pwa_app():
         "app": app,
         "FileResponse": FileResponse,
         "HTTPException": __import__("fastapi", fromlist=["HTTPException"]).HTTPException,
-        "STATIC_DIR": Path(__file__).resolve().parent / "backend" / "open_webui" / "static",
+        "STATIC_DIR": Path(__file__).resolve().parent / "static",
         "getattr": getattr,
     }
 
@@ -89,8 +89,18 @@ def test_manifest_is_installable():
     assert any(i.get("purpose") == "maskable" for i in m["icons"])
     # every icon file must actually exist on disk
     for icon in m["icons"]:
-        p = Path("backend/open_webui/static") / Path(icon["src"]).name
+        p = Path("static") / Path(icon["src"]).name
         assert p.exists(), f"missing icon file: {p}"
+
+
+def test_serviceworker_in_frontend_public_dir():
+    """The SW must live in the frontend public dir (static/) because backend
+    startup wipes backend/open_webui/static and re-copies from the build
+    output — anything else there is destroyed on every boot."""
+    sw = Path("static") / "serviceworker.js"
+    assert sw.exists(), "serviceworker.js missing from frontend public dir (static/)"
+    body = sw.read_text()
+    assert "install" in body and "fetch" in body
 
 
 def test_serviceworker_served_with_sw_headers():
