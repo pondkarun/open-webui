@@ -115,7 +115,18 @@
 			})();
 		</script>
 
-		<title>Open WebUI</title>
+		<script>
+			// Register the PWA service worker (offline shell + faster cold start).
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => {
+					navigator.serviceWorker
+						.register('/serviceworker.js', { scope: '/' })
+						.catch(() => undefined); // SW is progressive enhancement only
+				});
+			}
+		</script>
+
+		<title>Pond AI</title>
 
 		%sveltekit.head%
 	</head>

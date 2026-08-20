@@ -38,6 +38,7 @@ docker build -t pond-open-webui .
 docker run -d --name pond-open-webui \
   --add-host host.docker.internal:host-gateway \
   -p 127.0.0.1:3000:8080 \
+  -e WEBUI_NAME="Pond AI" \
   -e OPENAI_API_BASE_URL=http://host.docker.internal:8642/v1 \
   -e OPENAI_API_KEY=<API_SERVER_KEY from step 1> \
   -e ENABLE_OPENAI_API=true \
