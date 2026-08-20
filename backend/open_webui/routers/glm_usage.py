@@ -91,7 +91,7 @@ async def get_glm_usage(
 
     timeout = aiohttp.ClientTimeout(total=15)
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": api_key,
         "Accept-Language": "en-US,en",
         "Content-Type": "application/json",
     }
