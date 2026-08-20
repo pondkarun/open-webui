@@ -2687,20 +2687,6 @@ async def oauth_backchannel_logout(
     return await oauth_manager.handle_backchannel_logout(request, db=db)
 
 
-@app.get('/serviceworker.js')
-async def get_serviceworker():
-    """Serve the PWA service worker from the bundled static dir with a no-cache
-    header so updates land promptly."""
-    sw_path = STATIC_DIR / 'serviceworker.js'
-    if not sw_path.exists():
-        raise HTTPException(status_code=404)
-    return FileResponse(
-        sw_path,
-        media_type='application/javascript',
-        headers={'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/'},
-    )
-
-
 @app.get('/manifest.json')
 async def get_manifest_json():
     external_pwa_manifest_url = getattr(app.state, 'EXTERNAL_PWA_MANIFEST_URL', None)

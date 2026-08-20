@@ -59,7 +59,7 @@ def make_pwa_app():
         "getattr": getattr,
     }
 
-    for fn_name in ("get_manifest_json", "get_serviceworker"):
+    for fn_name in ("get_manifest_json",):
         fn_node = _extract_fn(fn_name)
         module = ast.Module(body=[fn_node], type_ignores=[])
         exec(compile(module, "main.py", "exec"), ns)
@@ -87,28 +87,27 @@ def test_manifest_is_installable():
     assert "192x192" in sizes
     assert "512x512" in sizes
     assert any(i.get("purpose") == "maskable" for i in m["icons"])
-    # every icon file must actually exist on disk
+    # every icon file must actually exist on disk (served at /static/<name>,
+    # sourced from repo static/static/ via vite build + startup copy)
     for icon in m["icons"]:
-        p = Path("static") / Path(icon["src"]).name
+        p = Path("static/static") / Path(icon["src"]).name
         assert p.exists(), f"missing icon file: {p}"
 
 
 def test_serviceworker_in_frontend_public_dir():
-    """The SW must live in the frontend public dir (static/) because backend
-    startup wipes backend/open_webui/static and re-copies from the build
-    output — anything else there is destroyed on every boot."""
+    """The SW must live in the frontend public dir (static/) — vite copies it
+    to the build root, and the SPA static mount serves it at /serviceworker.js
+    (scope '/' works because it sits at the origin root)."""
     sw = Path("static") / "serviceworker.js"
     assert sw.exists(), "serviceworker.js missing from frontend public dir (static/)"
     body = sw.read_text()
     assert "install" in body and "fetch" in body
 
 
-def test_serviceworker_served_with_sw_headers():
-    client = TestClient(make_pwa_app())
-    r = client.get("/serviceworker.js")
-    assert r.status_code == 200
-    assert "javascript" in r.headers["content-type"]
-    assert r.headers["cache-control"] == "no-cache"
-    assert r.headers["service-worker-allowed"] == "/"
-    body = r.text
-    assert "install" in body and "fetch" in body  # real SW content
+def test_no_shadowing_sw_route():
+    """The /serviceworker.js GET route must NOT exist — the SPA static mount
+    at '/' already serves the SW from the build root; a custom route would
+    shadow it and break (this exact bug shipped once: 404 on live)."""
+    app = make_pwa_app()
+    paths = {getattr(r, "path", None) for r in app.routes}
+    assert "/serviceworker.js" not in paths
