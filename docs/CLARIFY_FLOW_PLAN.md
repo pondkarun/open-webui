@@ -72,3 +72,52 @@ until Phase A is confirmed live and found lacking.
   `clarify_gateway.py` already does correctly.
 - Not touching Telegram/Discord adapters — they already have their own
   native button UIs via the same mechanism; nothing to fix there.
+
+---
+
+## Bonus finding (same session, 2026-08-20): tool-progress indicator is silently dropped
+
+Not part of the clarify flow, but found while testing streaming for a related UX
+complaint ("can't tell the AI is doing anything" during long tool-calling turns).
+Root cause fully diagnosed — implementation not yet started.
+
+**What's actually happening:**
+- The API server backend already emits real progress signals mid-turn as a
+  named SSE event, confirmed live via curl:
+  ```
+  event: hermes.tool.progress
+  data: {"tool": "terminal", "emoji": "💻", "label": "pwd", "toolCallId": "...", "status": "running"}
+  ...
+  event: hermes.tool.progress
+  data: {"tool": "terminal", "toolCallId": "...", "status": "completed"}
+  ```
+- Our fork's SSE consumer, `src/lib/apis/streaming/index.ts`
+  (`openAIStreamToIterator`), only reads `value.data` from each parsed SSE
+  event and never looks at `value.event` (the named-event field the
+  `eventsource-parser` library already exposes). Since
+  `{"tool":"terminal",...}` doesn't match the expected
+  `parsedData.choices[0].delta.content` shape, it falls through to `?? ''`
+  — an empty yield. The signal arrives and is silently discarded every time.
+- Plain streaming (no tool calls) works fine and looks like normal
+  token-by-token typing — this only affects turns where Hermes calls a tool
+  mid-response, which for this agent (terminal, memory, etc.) is common and
+  can take a long time per call.
+
+**Fix (not yet implemented):**
+1. In `openAIStreamToIterator`, branch on `value.event === 'hermes.tool.progress'`
+   (alongside the existing `sources`/`selectedModelId`/`usage` special
+   cases) and yield a new field, e.g. `toolProgress: {tool, emoji, label, status}`.
+2. In `Chat.svelte` (and `MultiResponseMessages.svelte`, same pattern) where
+   the generator from `createOpenAITextStream` is consumed: on a
+   `toolProgress` update with `status: "running"`, show a transient
+   "{emoji} {label}…" status line (NOT appended into the saved message
+   content — needs its own reactive variable, cleared on `status: "completed"`
+   or when real content starts arriving). Do not persist this text into chat
+   history.
+3. Test with a prompt that forces multiple sequential tool calls, confirm
+   the status line updates per tool and clears correctly, and confirm a
+   plain non-tool response still looks identical to today (no regression).
+
+Deliberately not attempted tonight — touching `Chat.svelte`'s streaming
+consumption logic carelessly late at night risks a worse regression than the
+current "silent gap" UX. Do this with full attention, not as a rushed patch.
