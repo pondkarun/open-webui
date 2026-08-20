@@ -28,12 +28,22 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description='Reset Open WebUI admin password')
     parser.add_argument('--password', help='new password (omitted = hidden prompt)')
     parser.add_argument('--email', help='target a specific account email instead of the admin')
+    parser.add_argument('--new-email', help='also change the account email to this value')
+    parser.add_argument('--list', action='store_true', help='list all accounts, then exit')
     args = parser.parse_args()
 
     from open_webui.internal.db import get_async_db_context
     from open_webui.models.auths import Auth, Auths
     from open_webui.models.users import Users
     from open_webui.utils.auth import get_password_hash, verify_password
+
+    # --- list mode -----------------------------------------------------------
+    if args.list:
+        users = await Users.get_users()
+        print('Accounts in DB:')
+        for u in users:
+            print(f'  - {u.email}  (role={u.role})')
+        return 0
 
     # --- locate the account -------------------------------------------------
     if args.email:
@@ -85,8 +95,25 @@ async def main() -> int:
         print('ERROR: verification after reset FAILED — password was not stored correctly')
         return 1
 
+    # --- optionally change the email too ------------------------------------
+    if args.new_email:
+        target = args.new_email.strip().lower()
+        if not target or '@' not in target:
+            print("ERROR: --new-email value doesn't look like an email")
+            return 1
+        existing = await Users.get_user_by_email(target)
+        if existing is not None and existing.id != user.id:
+            print(f'ERROR: {target} is already used by another account')
+            return 1
+        ok = await Auths.update_email_by_id(user.id, target)
+        if not ok:
+            print('ERROR: update_email_by_id returned False')
+            return 1
+        print(f'Email updated: {user.email} -> {target}')
+
+    final_email = args.new_email.strip().lower() if args.new_email else user.email
     print('OK: password reset and verified. You can now sign in with:')
-    print(f'     email    : {user.email}')
+    print(f'     email    : {final_email}')
     print(f'     password: (the one you just typed)')
     return 0
 

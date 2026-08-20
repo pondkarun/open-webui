@@ -37,7 +37,15 @@ async def main() -> None:
     wrong = await verify_password('wrong-password', stored)
     assert right, 'verify_password failed for the correct password'
     assert not wrong, 'verify_password passed for a wrong password'
-    print('PASS: reset flow works — hash stored, correct password verifies, wrong rejected')
+    # 3. also change the email like --new-email does
+    ok = await Auths.update_email_by_id(user.id, 'moved@test.local')
+    assert ok, 'update_email_by_id failed'
+    by_old = await Users.get_user_by_email('admin@test.local')
+    by_new = await Users.get_user_by_email('moved@test.local')
+    assert by_old is None and by_new is not None, 'email change did not propagate'
+    print('PASS: email change propagates (old gone, new found)')
+
+    print('ALL PASS')
 
 
 if __name__ == '__main__':
