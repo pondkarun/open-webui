@@ -36,7 +36,7 @@ VOL_ARGS=()
 if docker inspect "$NAME" >/dev/null 2>&1; then
   mapfile -t ENV_ARGS < <(docker inspect "$NAME" --format '{{range .Config.Env}}{{println .}}{{end}}' \
     | grep -vE '^(PATH|HOSTNAME|HOME|TERM|LANG)=' | sed 's/^/-e /')
-  mapfile -t VOL_ARGS < <(docker inspect "$NAME" --format '{{range .Mounts}}{{println .Source ":" .Destination}}{{end}}' \
+  mapfile -t VOL_ARGS < <(docker inspect "$NAME" --format '{{range .Mounts}}{{printf "%s:%s\n" .Source .Destination}}{{end}}' \
     | sed 's/^/-v /')
   echo "==> removing old container"
   docker rm -f "$NAME" >/dev/null
