@@ -1,0 +1,95 @@
+"""Reset the admin password of a running Open WebUI instance.
+
+Usage (inside the container, interactive — password is hidden, never hits
+shell history or chat):
+
+    docker exec -it pond-open-webui python /tmp/reset_admin_password.py
+
+Or non-interactively (visible in process list — avoid if possible):
+
+    docker exec -it pond-open-webui python /tmp/reset_admin_password.py --password 'newpass'
+
+What it does (verified against this fork's code):
+  1. Finds the admin user  (Users.get_user_by_role('admin'))
+  2. Reads a new password via getpass (or --password)
+  3. Hashes it with open_webui.utils.auth.get_password_hash  (async, argon2/bcrypt)
+  4. Auths.update_user_password_by_id(user.id, hashed)  (takes the HASH — not plain)
+  5. Re-activates the credential row (auth.active = True) in case it was soft-disabled
+  6. Re-verifies with verify_password before reporting success
+"""
+
+import argparse
+import asyncio
+import getpass
+import sys
+
+
+async def main() -> int:
+    parser = argparse.ArgumentParser(description='Reset Open WebUI admin password')
+    parser.add_argument('--password', help='new password (omitted = hidden prompt)')
+    parser.add_argument('--email', help='target a specific account email instead of the admin')
+    args = parser.parse_args()
+
+    from open_webui.internal.db import get_async_db_context
+    from open_webui.models.auths import Auth, Auths
+    from open_webui.models.users import Users
+    from open_webui.utils.auth import get_password_hash, verify_password
+
+    # --- locate the account -------------------------------------------------
+    if args.email:
+        user = await Users.get_user_by_email(args.email.lower())
+        if user is None:
+            print(f'ERROR: no user with email {args.email!r}')
+            return 1
+    else:
+        user = await Users.get_super_admin_user()
+        if user is None:
+            print('ERROR: no admin user found')
+            return 1
+
+    print(f'Resetting password for: {user.email} (role={user.role}, id={user.id})')
+
+    # --- read the new password ----------------------------------------------
+    if args.password:
+        new_password = args.password
+    else:
+        new_password = getpass.getpass('New password: ')
+        confirm = getpass.getpass('Confirm      : ')
+        if new_password != confirm:
+            print('ERROR: passwords do not match')
+            return 1
+    if len(new_password) < 8:
+        print('ERROR: password must be at least 8 characters')
+        return 1
+
+    # --- hash + persist (same code path as the API uses) ---------------------
+    hashed = await get_password_hash(new_password)
+    ok = await Auths.update_user_password_by_id(user.id, hashed)
+    if not ok:
+        print('ERROR: update_user_password_by_id returned False (auth row missing?)')
+        return 1
+
+    # --- re-activate the credential row in case it was soft-disabled ---------
+    async with get_async_db_context() as session:
+        credential = await session.get(Auth, user.id)
+        if credential is None:
+            print('ERROR: auth row disappeared mid-reset')
+            return 1
+        credential.active = True
+        await session.commit()
+
+    # --- verify against what is actually stored ------------------------------
+    async with get_async_db_context() as session:
+        stored = (await session.get(Auth, user.id)).password
+    if not await verify_password(new_password, stored):
+        print('ERROR: verification after reset FAILED — password was not stored correctly')
+        return 1
+
+    print('OK: password reset and verified. You can now sign in with:')
+    print(f'     email    : {user.email}')
+    print(f'     password: (the one you just typed)')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(asyncio.run(main()))
