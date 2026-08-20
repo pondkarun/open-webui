@@ -21,6 +21,7 @@ What it does (verified against this fork's code):
 import argparse
 import asyncio
 import getpass
+import os
 import sys
 
 
@@ -34,15 +35,18 @@ async def main() -> int:
 
     from open_webui.internal.db import get_async_db_context
     from open_webui.models.auths import Auth, Auths
-    from open_webui.models.users import Users
+    from open_webui.models.users import User, UserModel, Users
     from open_webui.utils.auth import get_password_hash, verify_password
 
     # --- list mode -----------------------------------------------------------
     if args.list:
-        users = await Users.get_users()
+        async with get_async_db_context() as session:
+            from sqlalchemy import select
+
+            rows = (await session.execute(select(User.email, User.role).order_by(User.created_at))).all()
         print('Accounts in DB:')
-        for u in users:
-            print(f'  - {u.email}  (role={u.role})')
+        for email, role in rows:
+            print(f'  - {email}  (role={role})')
         return 0
 
     # --- locate the account -------------------------------------------------
@@ -54,6 +58,15 @@ async def main() -> int:
     else:
         user = await Users.get_super_admin_user()
         if user is None:
+            # fallback: oldest account in the system (admin is always first)
+            async with get_async_db_context() as session:
+                from sqlalchemy import select
+
+                row = (
+                    await session.execute(select(User).order_by(User.created_at).limit(1))
+                ).scalars().first()
+                user = UserModel.model_validate(row) if row else None
+        if user is None:
             print('ERROR: no admin user found')
             return 1
 
@@ -63,11 +76,24 @@ async def main() -> int:
     if args.password:
         new_password = args.password
     else:
-        new_password = getpass.getpass('New password: ')
-        confirm = getpass.getpass('Confirm      : ')
-        if new_password != confirm:
-            print('ERROR: passwords do not match')
-            return 1
+        env_pw = os.environ.get('RESET_PASSWORD', '').strip()
+        if env_pw:
+            new_password = env_pw
+        elif not sys.stdin.isatty():
+            # non-interactive caller (AI agent / CI): generate a strong one-time
+            # password and print it ONCE for the operator to read off this terminal.
+            import secrets
+
+            new_password = secrets.token_urlsafe(9)
+            print(f'NON-INTERACTIVE MODE: generated password -> {new_password}')
+            print('(shown only here; change it in Settings after first login)')
+        else:
+            new_password = getpass.getpass('New password: ')
+            confirm = getpass.getpass('Confirm      : ')
+            if new_password != confirm:
+                print('ERROR: passwords do not match')
+                return 1
+
     if len(new_password) < 8:
         print('ERROR: password must be at least 8 characters')
         return 1
